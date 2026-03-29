@@ -1707,13 +1707,19 @@ let db = {
   rtowalk:[],
   fleet:[],
   maintenance:[],
-  activity:[]
+  activity:[],
+  settings: {
+    sheetsUrl: '',
+    sheetId: '',
+    attSheetsUrl: '',
+    attSheetId: ''
+  }
 };
 
 function saveDB(){
   if(!isAdminLoggedIn) return;
   try {
-    const defaultData = {students:[], attendance:[], payments:[], enquiries:[], rto:[], rtowalk:[], fleet:[], maintenance:[], activity:[]};
+    const defaultData = {students:[], attendance:[], payments:[], enquiries:[], rto:[], rtowalk:[], fleet:[], maintenance:[], activity:[], settings:{sheetsUrl:'',sheetId:'',attSheetsUrl:'',attSheetId:''}};
     const dbData = {...defaultData, ...db};
     
     // Save to Firestore First
@@ -2116,7 +2122,7 @@ async function saveAttendanceDay(){
   addActivity(`✅ Attendance saved for ${date}`);
 
   // Push to dedicated attendance sheet if connected
-  const attUrl = localStorage.getItem('pmds_att_script_url');
+  const attUrl = (db.settings && db.settings.attSheetsUrl) ? db.settings.attSheetsUrl : localStorage.getItem('pmds_att_script_url');
   if(attUrl){
     try{
       const studentMap = {};
@@ -2439,10 +2445,10 @@ function deleteFleetLog(id){
 }
 
 // ===== GOOGLE SHEETS INTEGRATION =====
-window._sheetsURL = localStorage.getItem('pmds_sheets_url') || '';
+window._sheetsURL = '';
 
 async function syncAllToSheets(silent=false){
-  const url = window._sheetsURL;
+  const url = window._sheetsURL || ((db.settings && db.settings.sheetsUrl) ? db.settings.sheetsUrl : '');
   if(!url){
     if(!silent) toast('⚠️ Go to Settings to connect Google Sheets first');
     return;
@@ -2477,9 +2483,10 @@ async function syncAllToSheets(silent=false){
 }
 
 function autoSync(){
-  if(window._sheetsURL) syncAllToSheets(true);
+  const url = window._sheetsURL || ((db.settings && db.settings.sheetsUrl) ? db.settings.sheetsUrl : '');
+  if(url) syncAllToSheets(true);
   // Also push attendance to dedicated attendance sheet
-  const attUrl = localStorage.getItem('pmds_att_script_url');
+  const attUrl = (db.settings && db.settings.attSheetsUrl) ? db.settings.attSheetsUrl : '';
   if(attUrl && db.attendance && db.attendance.length){
     const rows = db.attendance.map(a=>([a.id||'',a.date||'',a.student||'',a.time||'',a.status||'']));
     fetch(attUrl,{method:'POST',body:JSON.stringify({attendance:rows}),headers:{'Content-Type':'text/plain;charset=utf-8'}}).catch(()=>{});
@@ -2624,8 +2631,10 @@ async function connectAttSheet(){
     const res=await fetch(url,{method:'POST',body:JSON.stringify(testPayload),headers:{'Content-Type':'text/plain;charset=utf-8'}});
     const json=await res.json();
     if(json.ok === true || json.status === 'success'){
-      localStorage.setItem('pmds_att_script_url', url);
-      if(attId) localStorage.setItem('pmds_att_sheet_id', attId);
+      if(!db.settings) db.settings = {sheetsUrl:'',sheetId:'',attSheetsUrl:'',attSheetId:''};
+      db.settings.attSheetsUrl = url;
+      if(attId) db.settings.attSheetId = attId;
+      saveDB();
       result.innerHTML='<span style="color:#16A34A;font-weight:700">✅ Attendance sheet connected!</span>';
       toast('✅ Attendance sheet connected!');
     } else { throw new Error(json.message || json.error || 'Script returned an error'); }
@@ -2638,8 +2647,8 @@ async function connectAttSheet(){
 
 // ===== SETTINGS PAGE =====
 function initSettings(){
-  const saved = localStorage.getItem('pmds_sheets_url')||'';
-  const sheetId = localStorage.getItem('pmds_sheet_id')||'';
+  const saved = (db.settings && db.settings.sheetsUrl) ? db.settings.sheetsUrl : '';
+  const sheetId = (db.settings && db.settings.sheetId) ? db.settings.sheetId : '';
   if(saved){
     updateAppsScriptVar(saved);
     showConnectedState(saved);
@@ -2650,8 +2659,8 @@ function initSettings(){
     updateScriptCode(sheetId);
   }
   // Restore attendance sheet fields
-  const attUrl = localStorage.getItem('pmds_att_script_url')||'';
-  const attId  = localStorage.getItem('pmds_att_sheet_id')||'';
+  const attUrl = (db.settings && db.settings.attSheetsUrl) ? db.settings.attSheetsUrl : '';
+  const attId  = (db.settings && db.settings.attSheetId) ? db.settings.attSheetId : '';
   if(attUrl){ const el=document.getElementById('att-script-url-input'); if(el) el.value=attUrl; }
   if(attId){
     const el=document.getElementById('att-sheet-id-input'); if(el) el.value=attId;
@@ -2759,8 +2768,10 @@ async function connectSheets(){
     const json = await res.json();
     if(json.status === 'success'){
       // Save URL
-      localStorage.setItem('pmds_sheets_url', url);
-      if(sheetId) localStorage.setItem('pmds_sheet_id', sheetId);
+      if(!db.settings) db.settings = {sheetsUrl:'',sheetId:'',attSheetsUrl:'',attSheetId:''};
+      db.settings.sheetsUrl = url;
+      if(sheetId) db.settings.sheetId = sheetId;
+      saveDB();
       updateAppsScriptVar(url);
       showConnectedState(url);
       result.innerHTML = '<span style="color:#16A34A;font-weight:700">✅ Connected! A test row was written to your Students sheet.</span>';
@@ -2778,7 +2789,10 @@ async function connectSheets(){
 
 function disconnectSheets(){
   if(!confirm('Disconnect Google Sheets? Auto-sync will stop.')) return;
-  localStorage.removeItem('pmds_sheets_url');
+  if(!db.settings) db.settings = {sheetsUrl:'',sheetId:'',attSheetsUrl:'',attSheetId:''};
+  db.settings.sheetsUrl = '';
+  db.settings.sheetId = '';
+  saveDB();
   window._sheetsURL = '';
   updateAppsScriptVar('');
   document.getElementById('sheets-conn-banner').style.display = 'none';
