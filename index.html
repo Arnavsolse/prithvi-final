@@ -4227,6 +4227,9 @@
                 <h2>🎓 Students</h2>
                 <p>Manage all enrolled students</p>
               </div>
+              <div style="display:flex;align-items:center;gap:12px;flex:1;max-width:300px;margin-left:auto">
+                <input type="text" id="student-search" placeholder="🔍 Search students..." onkeyup="renderStudents()" style="background:#fff;border:1px solid #E2E8F0;padding:8px 12px;border-radius:8px;font-size:.85rem;width:100%;outline:none">
+              </div>
               <button class="adm-btn" onclick="toggleForm('add-student-form')">+ Add Student</button>
             </div>
             <div class="adm-widget" id="add-student-form" style="display:none;margin-bottom:20px">
@@ -4244,6 +4247,10 @@
                     <option>2-Wheeler Training [With Licence]</option>
                     <option>2-Wheeler Training [Without Licence]</option>
                     <option>2+4 Wheeler Training</option>
+                    <option>TR Lic. + Training</option>
+                    <option>Training + 2+4 Lic.</option>
+                    <option>Training + 2+3+4 TR.</option>
+                    <option>2+3+4 NT.</option>
                     <option>Refresher Course</option>
                     <option>RTO Consultation</option>
                   </select>
@@ -4325,6 +4332,9 @@
               <div>
                 <h2>✅ Attendance</h2>
                 <p id="att-date-label" style="font-size:.82rem;color:#6B7280;margin-top:2px;"></p>
+              </div>
+              <div style="display:flex;align-items:center;gap:12px;flex:1;min-width:200px;max-width:280px;margin-left:auto">
+                <input type="text" id="att-search" placeholder="🔍 Search attendance..." onkeyup="filterAttList()" style="background:#fff;border:1px solid #E2E8F0;padding:8px 12px;border-radius:8px;font-size:.85rem;width:100%;outline:none">
               </div>
               <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
                 <input type="date" id="att-date" onchange="attDateChanged()"
@@ -4489,6 +4499,11 @@
                     <option>4-Wheeler Training [Without Licence]</option>
                     <option>2-Wheeler Training [With Licence]</option>
                     <option>2-Wheeler Training [Without Licence]</option>
+                    <option>2+4 Wheeler Training</option>
+                    <option>TR Lic. + Training</option>
+                    <option>Training + 2+4 Lic.</option>
+                    <option>Training + 2+3+4 TR.</option>
+                    <option>2+3+4 NT.</option>
                     <option>Refresher Course</option>
                     <option>RTO Consultation</option>
                     <option>Other</option>
@@ -5144,28 +5159,7 @@ function out(data){return ContentService.createTextOutput(JSON.stringify(data)).
                     Code</button>
                 </div>
                 <pre id="apps-script-code"
-                  style="background:#0F172A;color:#E2E8F0;border-radius:8px;padding:14px;font-size:.72rem;overflow-x:auto;line-height:1.65;max-height:180px;overflow-y:auto;margin:0">function doPost(e){
-  const ss=SpreadsheetApp.openById(&#39;SHEET_ID_PLACEHOLDER&#39;);
-  const data=JSON.parse(e.postData.contents);
-  const cfg={
-    students:{name:&#39;Students&#39;,headers:['ID','Name','Phone','Course','Fees','Start Date','Status']},
-    attendance:{name:&#39;Attendance&#39;,headers:['ID','Date','Student','Time Slot','Status']},
-    payments:{name:&#39;Payments&#39;,headers:['ID','Date','Student','Amount','Method','Note']},
-    enquiries:{name:&#39;Enquiries&#39;,headers:['Date','Name','Phone','Course','Status','Notes']},
-    rto:{name:&#39;RTO Services&#39;,headers:['Student','Type','Applied Date','Test Date','Status']},
-    rtowalk:{name:&#39;Other RTO&#39;,headers:['ID','Date','Name','Mobile','Service','Total Fee','Paid','Method','Status','Pending','Notes']},
-    fleet:{name:&#39;Fleet Log&#39;,headers:['ID','Date','Car','Instructor','Hours','Fuel(L)','Fuel Cost','Odometer','Issue']}
-  };
-  for(const key in cfg){
-    let sheet=ss.getSheetByName(cfg[key].name);
-    if(!sheet){sheet=ss.insertSheet(cfg[key].name);}
-    sheet.clearContents();
-    sheet.getRange(1,1,1,cfg[key].headers.length).setValues([cfg[key].headers]).setFontWeight(&#39;bold&#39;).setBackground(&#39;#ff7c01&#39;).setFontColor(&#39;#ffffff&#39;);
-    if(data[key]&amp;&amp;data[key].length>0)
-      sheet.getRange(2,1,data[key].length,cfg[key].headers.length).setValues(data[key]);
-  }
-  return ContentService.createTextOutput(JSON.stringify({status:&#39;success&#39;})).setMimeType(ContentService.MimeType.JSON);
-}</pre>
+                  style="background:#0F172A;color:#E2E8F0;border-radius:8px;padding:14px;font-size:.72rem;overflow-x:auto;line-height:1.65;max-height:180px;overflow-y:auto;margin:0">/* Please click the orange "Copy Code" button above to dynamically generate your completely up-to-date and customized Apps Script based on your current fields. */</pre>
               </div>
 
               <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
@@ -5581,11 +5575,13 @@ function out(data){return ContentService.createTextOutput(JSON.stringify(data)).
 
     function renderStudents() {
       const tbody = document.getElementById('students-tbody');
-      if (!db.students.length) {
-        tbody.innerHTML = '<tr><td colspan="10"><div class="empty-state"><div class="es-ico">🎓</div><p>No students yet.<br>Click "Add Student" to get started.</p></div></td></tr>';
+      const q = (document.getElementById('student-search') ? document.getElementById('student-search').value.toLowerCase().trim() : '');
+      const filtered = db.students.filter(s => !q || (s.name && s.name.toLowerCase().includes(q)) || (s.phone && s.phone.includes(q)) || (s.status && s.status.toLowerCase()===q) || (s.course && s.course.toLowerCase().includes(q)));
+      if (!filtered.length) {
+        tbody.innerHTML = '<tr><td colspan="10"><div class="empty-state"><div class="es-ico">🎓</div><p>No students found.</p></div></td></tr>';
         return;
       }
-      tbody.innerHTML = db.students.map((s, i) => {
+      tbody.innerHTML = filtered.map((s, i) => {
         const bc = s.status === 'Active' ? 'active' : s.status === 'Pending' ? 'pending' : 'inactive';
         const totalFee = Number(s.fee || 0);
         const paid = db.payments.filter(p => p.student === s.name).reduce((sum, p) => sum + Number(p.amount || 0), 0);
@@ -5761,6 +5757,18 @@ function out(data){return ContentService.createTextOutput(JSON.stringify(data)).
     <span style="background:#DCFCE7;color:#16A34A;padding:5px 14px;border-radius:50px;font-size:.8rem;font-weight:600;border:1px solid #BBF7D0;">✅ ${present} Present</span>
     <span style="background:#FEE2E2;color:#DC2626;padding:5px 14px;border-radius:50px;font-size:.8rem;font-weight:600;border:1px solid #FECACA;">❌ ${absent} Absent</span>
     <span style="background:#FEF9C3;color:#CA8A04;padding:5px 14px;border-radius:50px;font-size:.8rem;font-weight:600;border:1px solid #FEF08A;">⏰ ${late} Late</span>`;
+    }
+
+    function filterAttList() {
+      const q = (document.getElementById('att-search') ? document.getElementById('att-search').value.toLowerCase().trim() : '');
+      const list = document.getElementById('att-list');
+      if (!list) return;
+      Array.from(list.children).forEach(row => {
+        if (row.classList.contains('empty-state')) return;
+        const nameNode = row.querySelector('div > div:nth-child(2)');
+        if (!nameNode) return;
+        row.style.display = nameNode.textContent.toLowerCase().includes(q) ? 'flex' : 'none';
+      });
     }
 
     function renderAttHistory(tbody) {
@@ -6466,6 +6474,8 @@ function out(data){return ContentService.createTextOutput(JSON.stringify(data)).
       const saved = (db.settings && db.settings.sheetsUrl) ? db.settings.sheetsUrl : '';
       const sheetId = (db.settings && db.settings.sheetId) ? db.settings.sheetId : '';
       if (saved) {
+        const pInp = document.getElementById('script-url-input');
+        if (pInp) pInp.value = saved;
         updateAppsScriptVar(saved);
         showConnectedState(saved);
       }
@@ -6494,14 +6504,8 @@ function out(data){return ContentService.createTextOutput(JSON.stringify(data)).
     function updateScriptCode(id) {
       const pre = document.getElementById('apps-script-code');
       if (!pre) return;
-      const filled = id || 'SHEET_ID_PLACEHOLDER';
-      pre.innerHTML = pre.innerHTML.replace(/openById\(&#39;.*?&#39;\)/, `openById(&#39;${filled}&#39;)`);
-    }
-
-    function copyAppsScript() {
-      const btn = document.getElementById('copy-btn');
-      const sheetId = (document.getElementById('sheet-id-input') || {}).value || 'YOUR_SHEET_ID_HERE';
-      const code = `const SHEET_ID = '${sheetId}';
+      const filled = id || 'YOUR_SHEET_ID_HERE';
+      const code = `const SHEET_ID = '${filled}';
 
 const SHEETS_CONFIG = {
   students:    { name: 'Students',        headers: ['ID','Name','Batch','Phone','Course','Fees','Start Date','Status'] },
@@ -6553,6 +6557,14 @@ function doPost(e) {
     return ContentService.createTextOutput(JSON.stringify({status:'error',message:err.toString()})).setMimeType(ContentService.MimeType.JSON);
   }
 }`;
+      pre.textContent = code;
+      return code;
+    }
+
+    function copyAppsScript() {
+      const btn = document.getElementById('copy-btn');
+      const sheetId = (document.getElementById('sheet-id-input') || {}).value || 'YOUR_SHEET_ID_HERE';
+      const code = updateScriptCode(sheetId);
       navigator.clipboard.writeText(code).then(() => {
         btn.textContent = '✅ Copied!';
         btn.style.background = '#10B981';
