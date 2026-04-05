@@ -1750,31 +1750,79 @@ firebase.auth().onAuthStateChanged((user) => {
     localStorage.setItem('pmds_adm_auth', '1');
     localStorage.setItem('pmds_adm_last_active', Date.now().toString());
     startActivityTracking();
-    if (overlay && overlay.classList.contains('open')) {
-      document.getElementById('adm-login').style.display='none';
-      document.getElementById('adm-panel').classList.add('open');
-      document.getElementById('login-err').style.display='none';
-      initPanel();
-    }
-    
-    // Setup Firestore real-time listener
+
+    // ── Always set up Firestore listener regardless of whether overlay is open.
+    //    This is critical for session-restore: Firebase Auth resolves BEFORE
+    //    openAdmin() is called from DOMContentLoaded, so the overlay isn't open
+    //    yet. We load data first, then open + render the panel.
     if (dbUnsubscribe) dbUnsubscribe();
+
+    let _panelInitialisedBySnapshot = false; // guard: init panel only once per login
+
     dbUnsubscribe = firebase.firestore().collection('admin_data').doc('school_db')
       .onSnapshot((docSnapshot) => {
         if (docSnapshot.exists) {
+          // Merge cloud data into in-memory db
           db = {...db, ...docSnapshot.data()};
-          // Re-render UI if admin is currently interacting
-          if(document.getElementById('adm-panel').classList.contains('open')) {
-             refreshAll();
-          }
         } else {
-           // Document doesn't exist yet, push defaults
-           saveDB();
+          // First ever login — document doesn't exist yet, push blank defaults
+          saveDB();
+        }
+
+        // If the panel is already open (normal login flow), just re-render.
+        const panel = document.getElementById('adm-panel');
+        if (panel && panel.classList.contains('open')) {
+          refreshAll();
+          return;
+        }
+
+        // Panel not open yet (session-restore flow):
+        // On the very FIRST snapshot we have fresh data — now open & render.
+        if (!_panelInitialisedBySnapshot) {
+          _panelInitialisedBySnapshot = true;
+          if (overlay) {
+            overlay.classList.add('open');
+            document.getElementById('adm-login').style.display = 'none';
+            document.getElementById('adm-panel').classList.add('open');
+            document.getElementById('login-err').style.display = 'none';
+            initPanel(); // renders everything with the just-loaded db
+          }
         }
       }, (error) => {
         console.error("Firestore Listen Error:", error);
-        alert("FIREBASE READ ERROR:\n" + error.message + "\n\nCannot pull database from cloud!");
+        if (error.code === 'permission-denied') {
+          // Rules may not have propagated yet — retry silently after 4 s
+          console.warn("Firestore permission denied. Retrying in 4s…");
+          setTimeout(() => {
+            if (!isAdminLoggedIn) return;
+            if (dbUnsubscribe) dbUnsubscribe();
+            dbUnsubscribe = firebase.firestore().collection('admin_data').doc('school_db')
+              .onSnapshot((snap) => {
+                if (snap.exists) {
+                  db = {...db, ...snap.data()};
+                  const p = document.getElementById('adm-panel');
+                  if (p && p.classList.contains('open')) refreshAll();
+                } else { saveDB(); }
+              }, (e2) => {
+                console.error("Firestore retry failed:", e2.message);
+                if (typeof toast === 'function') toast('⚠️ DB sync error: ' + e2.message);
+              });
+          }, 4000);
+        } else {
+          if (typeof toast === 'function') toast('⚠️ DB error: ' + error.message);
+          console.error("Firestore non-permission error:", error.message);
+        }
       });
+
+    // For normal (non-restore) login flow: overlay is already open, show panel.
+    // Data will arrive via onSnapshot above and trigger refreshAll().
+    if (overlay && overlay.classList.contains('open')) {
+      document.getElementById('adm-login').style.display = 'none';
+      document.getElementById('adm-panel').classList.add('open');
+      document.getElementById('login-err').style.display = 'none';
+      // initPanel will be called once onSnapshot fires with data
+    }
+
   } else {
     isAdminLoggedIn = false;
     localStorage.removeItem('pmds_adm_auth');
@@ -1784,8 +1832,14 @@ firebase.auth().onAuthStateChanged((user) => {
       dbUnsubscribe();
       dbUnsubscribe = null;
     }
+    // Reset in-memory db so stale data never bleeds into the next login
+    db = {
+      students:[], attendance:[], payments:[], enquiries:[],
+      rto:[], rtowalk:[], fleet:[], maintenance:[], activity:[],
+      settings:{sheetsUrl:'',sheetId:'',attSheetsUrl:'',attSheetId:''}
+    };
     if (overlay && overlay.classList.contains('open')) {
-      document.getElementById('adm-login').style.display='flex';
+      document.getElementById('adm-login').style.display = 'flex';
       document.getElementById('adm-panel').classList.remove('open');
     }
   }
@@ -1806,19 +1860,31 @@ function openAdmin(){
     firebase.auth().signOut();
   }
 
-  if(isAdminLoggedIn || (localStorage.getItem('pmds_adm_auth') === '1')){
-    // Let onAuthStateChanged handle the UI transitions or do it eagerly if already known
-    document.getElementById('adm-login').style.display='none';
+  if (isAdminLoggedIn) {
+    // Already confirmed logged in (e.g. admin button clicked while session live)
+    // onSnapshot is already running — just open panel and render with current db.
+    document.getElementById('adm-login').style.display = 'none';
     document.getElementById('adm-panel').classList.add('open');
-    // Ensure the data has loaded before initializing, if db properties are empty
     initPanel();
-  } else {
-    document.getElementById('adm-login').style.display='flex';
+  } else if (localStorage.getItem('pmds_adm_auth') === '1') {
+    // Firebase Auth is still resolving (session restore) — show a loading state.
+    // onAuthStateChanged → onSnapshot will open the panel once data arrives.
+    document.getElementById('adm-login').style.display = 'none';
     document.getElementById('adm-panel').classList.remove('open');
-    document.getElementById('adm-user').value='';
-    document.getElementById('adm-pass').value='';
-    document.getElementById('login-err').style.display='none';
-    setTimeout(()=>document.getElementById('adm-user').focus(),100);
+    // Show subtle loading indicator in login area while waiting
+    const loginBox = document.getElementById('adm-login');
+    if (loginBox) {
+      loginBox.style.display = 'flex';
+      const errEl = document.getElementById('login-err');
+      if (errEl) { errEl.style.color = '#ff7c01'; errEl.style.display = 'block'; errEl.textContent = '⏳ Restoring your session…'; }
+    }
+  } else {
+    document.getElementById('adm-login').style.display = 'flex';
+    document.getElementById('adm-panel').classList.remove('open');
+    document.getElementById('adm-user').value = '';
+    document.getElementById('adm-pass').value = '';
+    document.getElementById('login-err').style.display = 'none';
+    setTimeout(() => document.getElementById('adm-user').focus(), 100);
   }
 }
 
