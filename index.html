@@ -6,6 +6,11 @@
 <title>Prithviraj Motor Driving School — Pune's Premium Driving Academy</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800;900&family=Inter:ital,wght@0,300;0,400;0,500;0,600;1,300&display=swap" rel="stylesheet">
+<!-- Firebase SDKs — loaded in <head> so firebase is defined before any inline script -->
+<script src="https://www.gstatic.com/firebasejs/10.9.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.9.0/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.9.0/firebase-firestore-compat.js"></script>
+<script src="firebase-config.js"></script>
 <script type="application/ld+json">{"@context":"https://schema.org","@type":["DrivingSchool","LocalBusiness"],"name":"Prithviraj Motor Driving School","description":"Pune's premium techno-functional driving academy in Dhayari. Women-owned, RTO certified.","address":{"@type":"PostalAddress","streetAddress":"Shop No. 6, Ashtavinayak Plaza, Opp. Sundar Samruddhi Commercial Complex, Benkar Vasti, Narhe-Dhayari Rd","addressLocality":"Dhayari, Pune","addressRegion":"Maharashtra","postalCode":"411041","addressCountry":"IN"},"aggregateRating":{"@type":"AggregateRating","ratingValue":"4.9","reviewCount":"500"}}</script>
 <style>
 :root {
@@ -1685,11 +1690,7 @@ function out(data){return ContentService.createTextOutput(JSON.stringify(data)).
 <!-- Toast -->
 <div class="adm-toast" id="adm-toast"></div>
 
-<!-- Firebase SDKs -->
-<script src="https://www.gstatic.com/firebasejs/10.9.0/firebase-app-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/10.9.0/firebase-auth-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/10.9.0/firebase-firestore-compat.js"></script>
-<script src="firebase-config.js"></script>
+<!-- Firebase SDKs loaded in <head> -->
 
 <script>
 // ===== ADMIN PANEL ENGINE =====
@@ -1746,7 +1747,9 @@ firebase.auth().onAuthStateChanged((user) => {
   const overlay = document.getElementById('adm-overlay');
   if (user) {
     isAdminLoggedIn = true;
-    sessionStorage.setItem('pmds_adm_auth', '1');
+    localStorage.setItem('pmds_adm_auth', '1');
+    localStorage.setItem('pmds_adm_last_active', Date.now().toString());
+    startActivityTracking();
     if (overlay && overlay.classList.contains('open')) {
       document.getElementById('adm-login').style.display='none';
       document.getElementById('adm-panel').classList.add('open');
@@ -1774,7 +1777,9 @@ firebase.auth().onAuthStateChanged((user) => {
       });
   } else {
     isAdminLoggedIn = false;
-    sessionStorage.removeItem('pmds_adm_auth');
+    localStorage.removeItem('pmds_adm_auth');
+    localStorage.removeItem('pmds_adm_last_active');
+    stopActivityTracking();
     if (dbUnsubscribe) {
       dbUnsubscribe();
       dbUnsubscribe = null;
@@ -1788,7 +1793,20 @@ firebase.auth().onAuthStateChanged((user) => {
 
 function openAdmin(){
   document.getElementById('adm-overlay').classList.add('open');
-  if(isAdminLoggedIn || sessionStorage.getItem('pmds_adm_auth') === '1'){
+  const authStored = localStorage.getItem('pmds_adm_auth') === '1';
+  const lastActive = parseInt(localStorage.getItem('pmds_adm_last_active') || '0', 10);
+  const elapsed = Date.now() - lastActive;
+  const SESSION_TIMEOUT = 24 * 60 * 60 * 1000; // 24 hours in ms
+
+  // If stored session exists but has expired, force logout
+  if (authStored && elapsed > SESSION_TIMEOUT) {
+    localStorage.removeItem('pmds_adm_auth');
+    localStorage.removeItem('pmds_adm_last_active');
+    stopActivityTracking();
+    firebase.auth().signOut();
+  }
+
+  if(isAdminLoggedIn || (localStorage.getItem('pmds_adm_auth') === '1')){
     // Let onAuthStateChanged handle the UI transitions or do it eagerly if already known
     document.getElementById('adm-login').style.display='none';
     document.getElementById('adm-panel').classList.add('open');
@@ -1837,10 +1855,53 @@ function doLogout(){
   });
 }
 
-// Auto-open admin if already logged in this session
+// ── Activity Tracking & 24h Auto-Logout ─────────────────────────────────────
+const INACTIVITY_TIMEOUT = 24 * 60 * 60 * 1000; // 24 hours in ms
+const INACTIVITY_CHECK_INTERVAL = 60 * 1000;     // check every 60 seconds
+let _activityCheckTimer = null;
+const _activityEvents = ['mousemove','mousedown','keydown','touchstart','scroll','click'];
+
+function _refreshActivity(){
+  if(isAdminLoggedIn){
+    localStorage.setItem('pmds_adm_last_active', Date.now().toString());
+  }
+}
+
+function _checkInactivity(){
+  if(!isAdminLoggedIn) return;
+  const lastActive = parseInt(localStorage.getItem('pmds_adm_last_active') || '0', 10);
+  if(Date.now() - lastActive > INACTIVITY_TIMEOUT){
+    console.log('PMDS Admin: 24h inactivity timeout — logging out.');
+    doLogout();
+  }
+}
+
+function startActivityTracking(){
+  _activityEvents.forEach(evt => window.addEventListener(evt, _refreshActivity, {passive:true}));
+  if(_activityCheckTimer) clearInterval(_activityCheckTimer);
+  _activityCheckTimer = setInterval(_checkInactivity, INACTIVITY_CHECK_INTERVAL);
+}
+
+function stopActivityTracking(){
+  _activityEvents.forEach(evt => window.removeEventListener(evt, _refreshActivity));
+  if(_activityCheckTimer){ clearInterval(_activityCheckTimer); _activityCheckTimer = null; }
+}
+// ─────────────────────────────────────────────────────────────────────────────
+
+// Auto-open admin if already logged in and session not expired
 document.addEventListener('DOMContentLoaded', () => {
-  if(sessionStorage.getItem('pmds_adm_auth') === '1'){
+  const authStored = localStorage.getItem('pmds_adm_auth') === '1';
+  const lastActive = parseInt(localStorage.getItem('pmds_adm_last_active') || '0', 10);
+  const elapsed = Date.now() - lastActive;
+  const SESSION_TIMEOUT = 24 * 60 * 60 * 1000; // 24 hours
+
+  if(authStored && elapsed <= SESSION_TIMEOUT){
     openAdmin();
+  } else if(authStored) {
+    // Expired — clean up
+    localStorage.removeItem('pmds_adm_auth');
+    localStorage.removeItem('pmds_adm_last_active');
+    firebase.auth().signOut();
   }
 });
 
