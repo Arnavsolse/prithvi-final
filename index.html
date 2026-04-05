@@ -5623,6 +5623,7 @@ function out(data){return ContentService.createTextOutput(JSON.stringify(data)).
     }
     function deleteStudent(id) {
       if (!confirm('Delete this student?')) return;
+      if (editingIds.student === id) { editingIds.student = null; document.getElementById('add-student-form').style.display = 'none'; }
       db.students = db.students.filter(s => s.id !== id);
       saveDB(); refreshAll(); autoSync(); toast('🗑️ Student deleted');
     }
@@ -5885,6 +5886,7 @@ function out(data){return ContentService.createTextOutput(JSON.stringify(data)).
     }
     function deletePayment(id) {
       if (!confirm('Delete this payment record?')) return;
+      if (editingIds.payment === id) { editingIds.payment = null; document.getElementById('add-payment-form').style.display = 'none'; }
       db.payments = db.payments.filter(p => p.id !== id);
       saveDB(); renderPayments(); renderStudents(); renderOverview(); autoSync(); toast('🗑️ Payment deleted');
     }
@@ -5938,6 +5940,7 @@ function out(data){return ContentService.createTextOutput(JSON.stringify(data)).
     }
     function deleteEnquiry(idx) {
       if (!confirm('Delete this enquiry?')) return;
+      if (editingIds.enquiry !== null) { editingIds.enquiry = null; document.getElementById('add-enquiry-form').style.display = 'none'; }
       db.enquiries.splice(idx, 1);
       saveDB(); renderEnquiries(); renderOverview(); autoSync(); toast('🗑️ Enquiry deleted');
     }
@@ -5993,6 +5996,7 @@ function out(data){return ContentService.createTextOutput(JSON.stringify(data)).
     }
     function deleteRTO(id) {
       if (!confirm('Delete this RTO application?')) return;
+      if (editingIds.rto === id) { editingIds.rto = null; document.getElementById('add-rto-form').style.display = 'none'; }
       db.rto = db.rto.filter(r => r.id !== id);
       saveDB(); renderRTO(); autoSync(); toast('🗑️ RTO record deleted');
     }
@@ -6028,6 +6032,7 @@ function out(data){return ContentService.createTextOutput(JSON.stringify(data)).
 
     function deleteRTOWalk(id) {
       if (!confirm('Delete this client record?')) return;
+      if (editingIds.rtowalk === id) { editingIds.rtowalk = null; document.getElementById('add-rtowalk-form').style.display = 'none'; }
       db.rtowalk = db.rtowalk.filter(r => r.id !== id);
       saveDB(); renderRTOWalk(); autoSync(); toast('🗑️ Record deleted');
     }
@@ -6139,6 +6144,7 @@ function out(data){return ContentService.createTextOutput(JSON.stringify(data)).
 
     function deleteMaintenance(id) {
       if (!confirm('Delete this maintenance record?')) return;
+      if (editingIds.maint === id) { editingIds.maint = null; document.getElementById('add-maint-form').style.display = 'none'; }
       db.maintenance = db.maintenance.filter(m => m.id !== id);
       saveDB(); renderMaintenance(); renderFleet(); autoSync(); toast('🗑️ Record deleted');
     }
@@ -6253,6 +6259,7 @@ function out(data){return ContentService.createTextOutput(JSON.stringify(data)).
     }
     function deleteFleetLog(id) {
       if (!confirm('Delete this log entry?')) return;
+      if (editingIds.fleet === id) { editingIds.fleet = null; document.getElementById('add-log-form').style.display = 'none'; }
       db.fleet = db.fleet.filter(l => l.id !== id);
       saveDB(); renderFleet(); autoSync(); toast('🗑️ Log deleted');
     }
