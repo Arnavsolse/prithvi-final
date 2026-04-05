@@ -4563,6 +4563,8 @@
                     <option>RRC [2-Wheeler]</option>
                     <option>RRC [4-Wheeler]</option>
                   </select></div>
+                <div class="adm-form-field"><label>App Number</label><input type="text" id="rto-appnum" placeholder="e.g. MH12202300..."></div>
+                <div class="adm-form-field"><label>DOB</label><input type="date" id="rto-dob"></div>
                 <div class="adm-form-field"><label>Applied Date</label><input type="date" id="rto-date"></div>
                 <div class="adm-form-field"><label>Test Date</label><input type="date" id="rto-test"></div>
                 <div class="adm-form-field"><label>Status</label><select id="rto-status">
@@ -4584,6 +4586,8 @@
                     <tr>
                       <th>Student</th>
                       <th>Type</th>
+                      <th>App Number</th>
+                      <th>DOB</th>
                       <th>Applied</th>
                       <th>Test Date</th>
                       <th>Status</th>
@@ -5203,6 +5207,7 @@ function out(data){return ContentService.createTextOutput(JSON.stringify(data)).
 
     let isAdminLoggedIn = false;
     let dbUnsubscribe = null;
+    let editingIds = { student: null, payment: null, enquiry: null, rto: null, rtowalk: null, fleet: null, maint: null };
 
     // State stored in memory
     let db = {
@@ -5557,12 +5562,21 @@ function out(data){return ContentService.createTextOutput(JSON.stringify(data)).
       const date = document.getElementById('s-date').value;
       const status = document.getElementById('s-status').value;
       if (!name || !phone) { toast('❌ Name and phone are required'); return; }
-      db.students.push({ id: Date.now(), name, phone, course, batch, fee, date, status });
+      if (editingIds.student) {
+        const item = db.students.find(x => x.id === editingIds.student);
+        if (item) { item.name=name; item.phone=phone; item.course=course; item.batch=batch; item.fee=fee; item.date=date; item.status=status; }
+        editingIds.student = null;
+        const btn = document.querySelector('#add-student-form button[onclick="addStudent()"]');
+        if (btn) btn.textContent = 'Save Student';
+        toast('✅ Student updated!');
+      } else {
+        db.students.push({ id: Date.now(), name, phone, course, batch, fee, date, status });
+        addActivity(`👤 New student added: ${name}`);
+        toast('✅ Student added successfully!');
+      }
       saveDB(); refreshAll(); autoSync();
       document.getElementById('add-student-form').style.display = 'none';
       ['s-name', 's-phone', 's-fee'].forEach(id => document.getElementById(id).value = '');
-      addActivity(`👤 New student added: ${name}`);
-      toast('✅ Student added successfully!');
     }
 
     function renderStudents() {
@@ -5588,9 +5602,24 @@ function out(data){return ContentService.createTextOutput(JSON.stringify(data)).
       <td style="${balColor}">${balance > 0 ? '₹' + balance.toLocaleString('en-IN') : '✅ Paid'}</td>
       <td><span class="badge ${bc}">${s.status}</span></td>
       <td>${s.date || '—'}</td>
-      <td><button onclick="deleteStudent(${s.id})" class="adm-btn danger" style="padding:5px 12px;font-size:.76rem">Delete</button></td>
+      <td><button onclick="editStudent(${s.id})" class="adm-btn warning" style="padding:5px 12px;font-size:.76rem;background:#EAB308;border:none;color:#1e293b;font-weight:600;margin-right:1px">Edit</button> <button onclick="deleteStudent(${s.id})" class="adm-btn danger" style="padding:5px 12px;font-size:.76rem">Delete</button></td>
     </tr>`;
       }).join('');
+    }
+    function editStudent(id) {
+      const s = db.students.find(x => x.id === id);
+      if (!s) return;
+      editingIds.student = id;
+      document.getElementById('s-name').value = s.name || '';
+      document.getElementById('s-phone').value = s.phone || '';
+      document.getElementById('s-course').value = s.course || '4-Wheeler Training';
+      document.getElementById('s-batch').value = s.batch || '';
+      document.getElementById('s-fee').value = s.fee || '';
+      document.getElementById('s-date').value = s.date || '';
+      document.getElementById('s-status').value = s.status || 'Active';
+      const btn = document.querySelector('#add-student-form button[onclick="addStudent()"]');
+      if (btn) btn.textContent = 'Update Student';
+      document.getElementById('add-student-form').style.display = 'block';
     }
     function deleteStudent(id) {
       if (!confirm('Delete this student?')) return;
@@ -5713,6 +5742,8 @@ function out(data){return ContentService.createTextOutput(JSON.stringify(data)).
       updateAttSummary(students, sesF, date);
       renderAttHistory(document.getElementById('att-tbody'));
       saveDB();
+      clearTimeout(window._attAutoSaveTimer);
+      window._attAutoSaveTimer = setTimeout(() => { saveAttendanceDay(); }, 1500);
     }
 
     function attMarkAll(status) {
@@ -5800,12 +5831,21 @@ function out(data){return ContentService.createTextOutput(JSON.stringify(data)).
       const method = document.getElementById('pay-method').value;
       const note = document.getElementById('pay-note').value;
       if (student === '-- Select Student --' || !amount) { toast('❌ Student and amount required'); return; }
-      db.payments.push({ id: Date.now(), student, amount, date, method, note });
+      if (editingIds.payment) {
+        const item = db.payments.find(x => x.id === editingIds.payment);
+        if (item) { item.student=student; item.amount=amount; item.date=date; item.method=method; item.note=note; }
+        editingIds.payment = null;
+        const btn = document.querySelector('#add-payment-form button[onclick="addPayment()"]');
+        if (btn) btn.textContent = 'Save Payment';
+        toast('✅ Payment updated!');
+      } else {
+        db.payments.push({ id: Date.now(), student, amount, date, method, note });
+        addActivity(`💰 Payment recorded: ₹${Number(amount).toLocaleString('en-IN')} from ${student}`);
+        toast('✅ Payment recorded!');
+      }
       saveDB(); renderPayments(); renderStudents(); renderOverview(); autoSync();
       document.getElementById('pay-amount').value = ''; document.getElementById('pay-note').value = '';
       document.getElementById('add-payment-form').style.display = 'none';
-      addActivity(`💰 Payment recorded: ₹${Number(amount).toLocaleString('en-IN')} from ${student}`);
-      toast('✅ Payment recorded!');
     }
 
     function renderPayments() {
@@ -5826,11 +5866,23 @@ function out(data){return ContentService.createTextOutput(JSON.stringify(data)).
       <td style="${balColor}">${totalFee ? (balance > 0 ? '₹' + balance.toLocaleString('en-IN') : '✅ Cleared') : '—'}</td>
       <td><span class="badge paid">${p.method}</span></td>
       <td>${p.note || '—'}</td>
-      <td><button onclick="deletePayment(${p.id})" class="adm-btn danger" style="padding:5px 12px;font-size:.76rem">Delete</button></td>
+      <td><button onclick="editPayment(${p.id})" class="adm-btn warning" style="padding:5px 12px;font-size:.76rem;background:#EAB308;border:none;color:#1e293b;font-weight:600;margin-right:1px">Edit</button> <button onclick="deletePayment(${p.id})" class="adm-btn danger" style="padding:5px 12px;font-size:.76rem">Delete</button></td>
     </tr>`;
       }).join('');
     }
-
+    function editPayment(id) {
+      const p = db.payments.find(x => x.id === id);
+      if (!p) return;
+      editingIds.payment = id;
+      document.getElementById('pay-date').value = p.date || '';
+      document.getElementById('pay-student').value = p.student || '-- Select Student --';
+      document.getElementById('pay-amount').value = p.amount || '';
+      document.getElementById('pay-method').value = p.method || 'Cash / UPI';
+      document.getElementById('pay-note').value = p.note || '';
+      const btn = document.querySelector('#add-payment-form button[onclick="addPayment()"]');
+      if (btn) btn.textContent = 'Update Payment';
+      document.getElementById('add-payment-form').style.display = 'block';
+    }
     function deletePayment(id) {
       if (!confirm('Delete this payment record?')) return;
       db.payments = db.payments.filter(p => p.id !== id);
@@ -5845,12 +5897,20 @@ function out(data){return ContentService.createTextOutput(JSON.stringify(data)).
       const notes = document.getElementById('enq-notes').value;
       if (!name || !phone) { toast('❌ Name and phone required'); return; }
       const date = new Date().toISOString().split('T')[0];
-      db.enquiries.push({ name, phone, course, status, notes, date });
+      if (editingIds.enquiry !== null) {
+        db.enquiries[editingIds.enquiry] = { name, phone, course, status, notes, date: db.enquiries[editingIds.enquiry].date || date };
+        editingIds.enquiry = null;
+        const btn = document.querySelector('#add-enquiry-form button[onclick="addEnquiry()"]');
+        if (btn) btn.textContent = 'Save Enquiry';
+        toast('✅ Enquiry updated!');
+      } else {
+        db.enquiries.push({ name, phone, course, status, notes, date });
+        addActivity(`📞 New enquiry: ${name} – ${course}`);
+        toast('✅ Enquiry logged!');
+      }
       saveDB(); renderEnquiries(); renderOverview(); autoSync();
       ['enq-name', 'enq-phone', 'enq-notes'].forEach(id => document.getElementById(id).value = '');
       document.getElementById('add-enquiry-form').style.display = 'none';
-      addActivity(`📞 New enquiry: ${name} – ${course}`);
-      toast('✅ Enquiry logged!');
     }
 
     function renderEnquiries() {
@@ -5860,8 +5920,21 @@ function out(data){return ContentService.createTextOutput(JSON.stringify(data)).
       tbody.innerHTML = sorted.map((e, i) => {
         const idx = db.enquiries.length - 1 - i; // index in original array for deletion
         const bc = e.status === 'Converted' ? 'active' : e.status === 'Lost' ? 'inactive' : e.status === 'New' ? 'due' : 'pending';
-        return `<tr><td>${e.date}</td><td><strong>${e.name}</strong></td><td>${e.phone}</td><td>${e.course}</td><td><span class="badge ${bc}">${e.status}</span></td><td>${e.notes || '—'}</td><td><button onclick="deleteEnquiry(${idx})" class="adm-btn danger" style="padding:5px 12px;font-size:.76rem">Delete</button></td></tr>`;
+        return `<tr><td>${e.date}</td><td><strong>${e.name}</strong></td><td>${e.phone}</td><td>${e.course}</td><td><span class="badge ${bc}">${e.status}</span></td><td>${e.notes || '—'}</td><td><button onclick="editEnquiry(${idx})" class="adm-btn warning" style="padding:5px 12px;font-size:.76rem;background:#EAB308;border:none;color:#1e293b;font-weight:600;margin-right:1px">Edit</button> <button onclick="deleteEnquiry(${idx})" class="adm-btn danger" style="padding:5px 12px;font-size:.76rem">Delete</button></td></tr>`;
       }).join('');
+    }
+    function editEnquiry(idx) {
+      const e = db.enquiries[idx];
+      if (!e) return;
+      editingIds.enquiry = idx;
+      document.getElementById('enq-name').value = e.name || '';
+      document.getElementById('enq-phone').value = e.phone || '';
+      document.getElementById('enq-course').value = e.course || '4-Wheeler Training';
+      document.getElementById('enq-status').value = e.status || 'New';
+      document.getElementById('enq-notes').value = e.notes || '';
+      const btn = document.querySelector('#add-enquiry-form button[onclick="addEnquiry()"]');
+      if (btn) btn.textContent = 'Update Enquiry';
+      document.getElementById('add-enquiry-form').style.display = 'block';
     }
     function deleteEnquiry(idx) {
       if (!confirm('Delete this enquiry?')) return;
@@ -5872,15 +5945,27 @@ function out(data){return ContentService.createTextOutput(JSON.stringify(data)).
     function addRTO() {
       const student = document.getElementById('rto-student').value;
       const type = document.getElementById('rto-type').value;
+      const appnum = document.getElementById('rto-appnum').value.trim();
+      const dob = document.getElementById('rto-dob').value;
       const date = document.getElementById('rto-date').value;
       const test = document.getElementById('rto-test').value;
       const status = document.getElementById('rto-status').value;
       if (student === '-- Select Student --') { toast('❌ Please select a student or Walk-in Client'); return; }
-      db.rto.push({ id: Date.now(), student, type, date, test, status });
+      if (editingIds.rto) {
+        const item = db.rto.find(x => x.id === editingIds.rto);
+        if (item) { item.student=student; item.type=type; item.appnum=appnum; item.dob=dob; item.date=date; item.test=test; item.status=status; }
+        editingIds.rto = null;
+        const btn = document.querySelector('#add-rto-form button[onclick="addRTO()"]');
+        if (btn) btn.textContent = 'Save Application';
+        toast('✅ Application updated!');
+      } else {
+        db.rto.push({ id: Date.now(), student, type, appnum, dob, date, test, status });
+        addActivity(`🏛️ RTO application added: ${student} – ${type}`);
+        toast('✅ RTO application saved!');
+      }
       saveDB(); renderRTO(); autoSync();
       document.getElementById('add-rto-form').style.display = 'none';
-      addActivity(`🏛️ RTO application added: ${student} – ${type}`);
-      toast('✅ RTO application saved!');
+      ['rto-appnum','rto-dob'].forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
     }
 
     function renderRTO() {
@@ -5888,8 +5973,23 @@ function out(data){return ContentService.createTextOutput(JSON.stringify(data)).
       if (!db.rto.length) { tbody.innerHTML = '<tr><td colspan="6"><div class="empty-state"><div class="es-ico">🏛️</div><p>No RTO applications yet.</p></div></td></tr>'; return; }
       tbody.innerHTML = db.rto.map(r => {
         const bc = r.status === 'Passed' ? 'active' : r.status === 'Failed' ? 'due' : r.status === 'Applied' ? 'paid' : 'pending';
-        return `<tr><td>${r.student}</td><td>${r.type}</td><td>${r.date}</td><td>${r.test || '—'}</td><td><span class="badge ${bc}">${r.status}</span></td><td><button onclick="deleteRTO(${r.id})" class="adm-btn danger" style="padding:5px 12px;font-size:.76rem">Delete</button></td></tr>`;
+        return `<tr><td>${r.student}</td><td>${r.type}</td><td>${r.appnum || '—'}</td><td>${r.dob || '—'}</td><td>${r.date}</td><td>${r.test || '—'}</td><td><span class="badge ${bc}">${r.status}</span></td><td><button onclick="editRTO(${r.id})" class="adm-btn warning" style="padding:5px 12px;font-size:.76rem;background:#EAB308;border:none;color:#1e293b;font-weight:600;margin-right:1px">Edit</button> <button onclick="deleteRTO(${r.id})" class="adm-btn danger" style="padding:5px 12px;font-size:.76rem">Delete</button></td></tr>`;
       }).join('');
+    }
+    function editRTO(id) {
+      const r = db.rto.find(x => x.id === id);
+      if (!r) return;
+      editingIds.rto = id;
+      document.getElementById('rto-student').value = r.student || '-- Select Student --';
+      document.getElementById('rto-type').value = r.type || 'Learner License';
+      document.getElementById('rto-appnum').value = r.appnum || '';
+      document.getElementById('rto-dob').value = r.dob || '';
+      document.getElementById('rto-date').value = r.date || '';
+      document.getElementById('rto-test').value = r.test || '';
+      document.getElementById('rto-status').value = r.status || 'Documents Pending';
+      const btn = document.querySelector('#add-rto-form button[onclick="addRTO()"]');
+      if (btn) btn.textContent = 'Update Application';
+      document.getElementById('add-rto-form').style.display = 'block';
     }
     function deleteRTO(id) {
       if (!confirm('Delete this RTO application?')) return;
@@ -5909,12 +6009,21 @@ function out(data){return ContentService.createTextOutput(JSON.stringify(data)).
       const pending = document.getElementById('rw-pending').value.trim();
       const notes = document.getElementById('rw-notes').value.trim();
       if (!name || !mobile) { toast('❌ Name and mobile are required'); return; }
-      db.rtowalk.push({ id: Date.now(), date, name, mobile, service, fee, paid, method, status, pending, notes });
+      if (editingIds.rtowalk) {
+        const item = db.rtowalk.find(x => x.id === editingIds.rtowalk);
+        if (item) { item.date=date; item.name=name; item.mobile=mobile; item.service=service; item.fee=fee; item.paid=paid; item.method=method; item.status=status; item.pending=pending; item.notes=notes; }
+        editingIds.rtowalk = null;
+        const btn = document.querySelector('#add-rtowalk-form button[onclick="addRTOWalk()"]');
+        if (btn) btn.textContent = 'Save Client';
+        toast('✅ Client updated!');
+      } else {
+        db.rtowalk.push({ id: Date.now(), date, name, mobile, service, fee, paid, method, status, pending, notes });
+        addActivity(`🪪 RTO walk-in added: ${name} – ${service}`);
+        toast('✅ Client saved!');
+      }
       saveDB(); renderRTOWalk(); autoSync();
       document.getElementById('add-rtowalk-form').style.display = 'none';
       ['rw-name', 'rw-mobile', 'rw-fee', 'rw-paid', 'rw-pending', 'rw-notes'].forEach(id => document.getElementById(id).value = '');
-      addActivity(`🪪 RTO walk-in added: ${name} – ${service}`);
-      toast('✅ Client saved!');
     }
 
     function deleteRTOWalk(id) {
@@ -5951,9 +6060,27 @@ function out(data){return ContentService.createTextOutput(JSON.stringify(data)).
       <td><span class="badge ${sbc}">${r.status}</span></td>
       <td style="max-width:130px;font-size:.8rem">${pendBadge}</td>
       <td style="max-width:140px;font-size:.8rem;color:#6B7280">${r.notes || '—'}</td>
-      <td><button onclick="deleteRTOWalk(${r.id})" class="adm-btn danger" style="padding:5px 12px;font-size:.76rem">Delete</button></td>
+      <td><button onclick="editRTOWalk(${r.id})" class="adm-btn warning" style="padding:5px 12px;font-size:.76rem;background:#EAB308;border:none;color:#1e293b;font-weight:600;margin-right:1px">Edit</button> <button onclick="deleteRTOWalk(${r.id})" class="adm-btn danger" style="padding:5px 12px;font-size:.76rem">Delete</button></td>
     </tr>`;
       }).join('');
+    }
+    function editRTOWalk(id) {
+      const r = db.rtowalk.find(x => x.id === id);
+      if (!r) return;
+      editingIds.rtowalk = id;
+      document.getElementById('rw-name').value = r.name || '';
+      document.getElementById('rw-mobile').value = r.mobile || '';
+      document.getElementById('rw-service').value = r.service || 'Learner License';
+      document.getElementById('rw-date').value = r.date || '';
+      document.getElementById('rw-fee').value = r.fee || '';
+      document.getElementById('rw-paid').value = r.paid || '';
+      document.getElementById('rw-method').value = r.method || 'Cash / UPI';
+      document.getElementById('rw-status').value = r.status || 'Applied at RTO';
+      document.getElementById('rw-pending').value = r.pending || '';
+      document.getElementById('rw-notes').value = r.notes || '';
+      const btn = document.querySelector('#add-rtowalk-form button[onclick="addRTOWalk()"]');
+      if (btn) btn.textContent = 'Update Client';
+      document.getElementById('add-rtowalk-form').style.display = 'block';
     }
 
     function addFleetLog() {
@@ -5966,12 +6093,21 @@ function out(data){return ContentService.createTextOutput(JSON.stringify(data)).
       const odo = document.getElementById('log-odo').value;
       const issue = document.getElementById('log-issue').value.trim();
       if (!car || !date) { toast('❌ Date and car name required'); return; }
-      db.fleet.push({ id: Date.now(), date, car, instructor, hours, fuel, fuelcost, odo, issue });
+      if (editingIds.fleet) {
+        const item = db.fleet.find(x => x.id === editingIds.fleet);
+        if (item) { item.date=date; item.car=car; item.instructor=instructor; item.hours=hours; item.fuel=fuel; item.fuelcost=fuelcost; item.odo=odo; item.issue=issue; }
+        editingIds.fleet = null;
+        const btn = document.querySelector('#add-log-form button[onclick="addFleetLog()"]');
+        if (btn) btn.textContent = 'Save Record';
+        toast('✅ Fleet log updated!');
+      } else {
+        db.fleet.push({ id: Date.now(), date, car, instructor, hours, fuel, fuelcost, odo, issue });
+        addActivity(`🚗 Fleet log added: ${car}`);
+        toast('✅ Fleet log saved!');
+      }
       saveDB(); renderFleet(); autoSync();
       document.getElementById('add-log-form').style.display = 'none';
       ['log-car', 'log-instructor', 'log-hours', 'log-fuel', 'log-fuelcost', 'log-odo', 'log-issue'].forEach(id => document.getElementById(id).value = '');
-      addActivity(`🚗 Fleet log added: ${car}`);
-      toast('✅ Fleet log saved!');
     }
 
     function addMaintenance() {
@@ -5984,12 +6120,21 @@ function out(data){return ContentService.createTextOutput(JSON.stringify(data)).
       const next = document.getElementById('maint-next').value;
       const notes = document.getElementById('maint-notes').value.trim();
       if (!car || !date) { toast('❌ Date and car name required'); return; }
-      db.maintenance.push({ id: Date.now(), date, car, type, cost, vendor, odo, next, notes });
+      if (editingIds.maint) {
+        const item = db.maintenance.find(x => x.id === editingIds.maint);
+        if (item) { item.date=date; item.car=car; item.type=type; item.cost=cost; item.vendor=vendor; item.odo=odo; item.next=next; item.notes=notes; }
+        editingIds.maint = null;
+        const btn = document.querySelector('#add-maint-form button[onclick="addMaintenance()"]');
+        if (btn) btn.textContent = 'Save Record';
+        toast('✅ Maintenance updated!');
+      } else {
+        db.maintenance.push({ id: Date.now(), date, car, type, cost, vendor, odo, next, notes });
+        addActivity(`🔧 Maintenance logged: ${type} for ${car} – ₹${Number(cost || 0).toLocaleString('en-IN')}`);
+        toast('✅ Maintenance saved!');
+      }
       saveDB(); renderMaintenance(); renderFleet(); autoSync();
       document.getElementById('add-maint-form').style.display = 'none';
       ['maint-car', 'maint-cost', 'maint-vendor', 'maint-odo', 'maint-notes'].forEach(id => document.getElementById(id).value = '');
-      addActivity(`🔧 Maintenance logged: ${type} for ${car} – ₹${Number(cost || 0).toLocaleString('en-IN')}`);
-      toast('✅ Maintenance saved!');
     }
 
     function deleteMaintenance(id) {
@@ -6002,10 +6147,12 @@ function out(data){return ContentService.createTextOutput(JSON.stringify(data)).
       const tbody = document.getElementById('maint-tbody');
       if (!tbody) return;
       const filter = document.getElementById('maint-filter');
-      const cars = [...new Set(db.maintenance.map(m => m.car))];
+      const currentMonth = new Date().toISOString().slice(0, 7);
+      const monthlyLogs = db.maintenance.filter(m => m.date && m.date.startsWith(currentMonth));
+      const cars = [...new Set(monthlyLogs.map(m => m.car))];
       const curVal = filter ? filter.value : 'all';
       if (filter) { filter.innerHTML = '<option value="all">All Cars</option>' + cars.map(c => `<option value="${c}">${c}</option>`).join(''); filter.value = curVal; }
-      const logs = curVal === 'all' ? db.maintenance : db.maintenance.filter(m => m.car === curVal);
+      const logs = curVal === 'all' ? monthlyLogs : monthlyLogs.filter(m => m.car === curVal);
       const sorted = [...logs].sort((a, b) => b.date.localeCompare(a.date));
       const totalCost = logs.reduce((s, m) => s + Number(m.cost || 0), 0);
       const el = id => document.getElementById(id);
@@ -6026,9 +6173,25 @@ function out(data){return ContentService.createTextOutput(JSON.stringify(data)).
       <td>${m.odo ? Number(m.odo).toLocaleString('en-IN') + ' km' : '—'}</td>
       <td>${nextBadge}</td>
       <td style="font-size:.82rem;color:#6B7280">${m.notes || '—'}</td>
-      <td><button onclick="deleteMaintenance(${m.id})" class="adm-btn danger" style="padding:5px 12px;font-size:.76rem">Delete</button></td>
+      <td><button onclick="editMaintenance(${m.id})" class="adm-btn warning" style="padding:5px 12px;font-size:.76rem;background:#EAB308;border:none;color:#1e293b;font-weight:600;margin-right:1px">Edit</button> <button onclick="deleteMaintenance(${m.id})" class="adm-btn danger" style="padding:5px 12px;font-size:.76rem">Delete</button></td>
     </tr>`;
       }).join('');
+    }
+    function editMaintenance(id) {
+      const m = db.maintenance.find(x => x.id === id);
+      if (!m) return;
+      editingIds.maint = id;
+      document.getElementById('maint-date').value = m.date || '';
+      document.getElementById('maint-car').value = m.car || '';
+      document.getElementById('maint-type').value = m.type || 'Regular Service';
+      document.getElementById('maint-cost').value = m.cost || '';
+      document.getElementById('maint-vendor').value = m.vendor || '';
+      document.getElementById('maint-odo').value = m.odo || '';
+      document.getElementById('maint-next').value = m.next || '';
+      document.getElementById('maint-notes').value = m.notes || '';
+      const btn = document.querySelector('#add-maint-form button[onclick="addMaintenance()"]');
+      if (btn) btn.textContent = 'Update Record';
+      document.getElementById('add-maint-form').style.display = 'block';
     }
 
     function renderFleet() {
@@ -6068,11 +6231,26 @@ function out(data){return ContentService.createTextOutput(JSON.stringify(data)).
       <td style="color:#ff7c01;font-weight:600">${l.fuelcost ? '₹' + Number(l.fuelcost).toLocaleString('en-IN') : '—'}</td>
       <td>${l.odo ? Number(l.odo).toLocaleString('en-IN') + ' km' : '—'}</td>
       <td>${noteBadge}</td>
-      <td><button onclick="deleteFleetLog(${l.id})" class="adm-btn danger" style="padding:5px 12px;font-size:.76rem">Delete</button></td>
+      <td><button onclick="editFleetLog(${l.id})" class="adm-btn warning" style="padding:5px 12px;font-size:.76rem;background:#EAB308;border:none;color:#1e293b;font-weight:600;margin-right:1px">Edit</button> <button onclick="deleteFleetLog(${l.id})" class="adm-btn danger" style="padding:5px 12px;font-size:.76rem">Delete</button></td>
     </tr>`;
       }).join('');
     }
-
+    function editFleetLog(id) {
+      const l = db.fleet.find(x => x.id === id);
+      if (!l) return;
+      editingIds.fleet = id;
+      document.getElementById('log-date').value = l.date || '';
+      document.getElementById('log-car').value = l.car || '';
+      document.getElementById('log-instructor').value = l.instructor || '';
+      document.getElementById('log-hours').value = l.hours || '';
+      document.getElementById('log-fuel').value = l.fuel || '';
+      document.getElementById('log-fuelcost').value = l.fuelcost || '';
+      document.getElementById('log-odo').value = l.odo || '';
+      document.getElementById('log-issue').value = l.issue || '';
+      const btn = document.querySelector('#add-log-form button[onclick="addFleetLog()"]');
+      if (btn) btn.textContent = 'Update Record';
+      document.getElementById('add-log-form').style.display = 'block';
+    }
     function deleteFleetLog(id) {
       if (!confirm('Delete this log entry?')) return;
       db.fleet = db.fleet.filter(l => l.id !== id);
@@ -6098,7 +6276,7 @@ function out(data){return ContentService.createTextOutput(JSON.stringify(data)).
           attendance: db.attendance.map(a => ([a.id || '', a.date || '', a.student || '', a.time || '', a.status || ''])),
           payments: db.payments.map(p => ([p.id || '', p.date || '', p.student || '', p.amount || '', p.method || '', p.note || ''])),
           enquiries: db.enquiries.map(e => ([e.date || '', e.name || '', e.phone || '', e.course || '', e.status || '', e.notes || ''])),
-          rto: db.rto.map(r => ([r.student || '', r.type || '', r.date || '', r.test || '', r.status || ''])),
+          rto: db.rto.map(r => ([r.id || '', r.student || '', r.type || '', r.appnum || '', r.dob || '', r.date || '', r.test || '', r.status || ''])),
           rtowalk: db.rtowalk.map(r => ([r.id || '', r.date || '', r.name || '', r.mobile || '', r.service || '', r.fee || '', r.paid || '', r.method || '', r.status || '', r.pending || '', r.notes || ''])),
           fleet: db.fleet.map(l => ([l.id || '', l.date || '', l.car || '', l.instructor || '', l.hours || '', l.fuel || '', l.fuelcost || '', l.odo || '', l.issue || ''])),
           maintenance: db.maintenance.map(m => ([m.id || '', m.date || '', m.car || '', m.type || '', m.cost || '', m.vendor || '', m.odo || '', m.next || '', m.notes || '']))
@@ -6120,12 +6298,7 @@ function out(data){return ContentService.createTextOutput(JSON.stringify(data)).
     function autoSync() {
       const url = window._sheetsURL || ((db.settings && db.settings.sheetsUrl) ? db.settings.sheetsUrl : '');
       if (url) syncAllToSheets(true);
-      // Also push attendance to dedicated attendance sheet
-      const attUrl = (db.settings && db.settings.attSheetsUrl) ? db.settings.attSheetsUrl : '';
-      if (attUrl && db.attendance && db.attendance.length) {
-        const rows = db.attendance.map(a => ([a.id || '', a.date || '', a.student || '', a.time || '', a.status || '']));
-        fetch(attUrl, { method: 'POST', body: JSON.stringify({ attendance: rows }), headers: { 'Content-Type': 'text/plain;charset=utf-8' } }).catch(() => { });
-      }
+      // Attendance matrix uses its directly structured payload triggers via debouncing.
     }
     async function syncToSheets() { syncAllToSheets(); }
 
@@ -6201,7 +6374,7 @@ function out(data){return ContentService.createTextOutput(JSON.stringify(data)).
         "  const ss=getSS();let sheet=ss.getSheetByName(monthTabName(year,month));",
         "  if(!sheet)sheet=createMonthlyTab(year,month);",
         "  const days=new Date(year,month,0).getDate(),col=day+3;",
-        "  const map={present:'P',absent:'A',late:'L'};",
+        "  const map={present:'P',absent:'A',late:'L',unmarked:''};",
         "  let data=sheet.getDataRange().getValues();",
         "  const nameToRow={};",
         "  for(let r=1;r<data.length;r++){const n=String(data[r][1]).trim().toLowerCase();if(n)nameToRow[n]=r+1;}",
@@ -6217,12 +6390,13 @@ function out(data){return ContentService.createTextOutput(JSON.stringify(data)).
         "    });",
         "  }",
         "  Object.entries(d.attendance||{}).forEach(([name,status])=>{",
-        "    const cell=map[status]||'';if(!cell)return;",
+        "    const cell=map[status];if(cell===undefined)return;",
         "    const sRow=nameToRow[name.toLowerCase().trim()];if(!sRow)return;",
         "    const range=sheet.getRange(sRow,col);range.setValue(cell);",
         "    if(cell==='P')range.setBackground('#0D2B1A').setFontColor('#6EE7B7').setFontWeight('bold');",
         "    else if(cell==='A')range.setBackground('#2D0D0D').setFontColor('#FCA5A5').setFontWeight('bold');",
         "    else if(cell==='L')range.setBackground('#2D2700').setFontColor('#FCD34D').setFontWeight('bold');",
+        "    else range.setBackground(null).setFontColor(null).setFontWeight('normal');",
         "  });",
         "  SpreadsheetApp.flush();return out({ok:true});",
         "}",
@@ -6327,7 +6501,7 @@ const SHEETS_CONFIG = {
   attendance:  { name: 'Attendance',      headers: ['ID','Date','Student','Time Slot','Status'] },
   payments:    { name: 'Payments',        headers: ['ID','Date','Student','Amount','Method','Note'] },
   enquiries:   { name: 'Enquiries',       headers: ['Date','Name','Phone','Course','Status','Notes'] },
-  rto:         { name: 'RTO Services',    headers: ['ID','Student','Type','Applied Date','Test Date','Status'] },
+  rto:         { name: 'RTO Services',    headers: ['ID','Student','Type','App Number','DOB','Applied Date','Test Date','Status'] },
   rtowalk:     { name: 'Other RTO',       headers: ['ID','Date','Name','Mobile','Service','Total Fee','Paid','Method','Status','Pending','Notes'] },
   fleet:       { name: 'Fleet Log',       headers: ['ID','Date','Car','Instructor','Hours','Fuel(L)','Fuel Cost','Odometer','Issue'] },
   maintenance: { name: 'Maintenance Log', headers: ['ID','Date','Car','Service Type','Cost','Vendor','Odometer','Next Service','Notes'] }
